@@ -15,7 +15,7 @@ contract EVM {
             }
             let free_memoey_pointer  := allocate(64)
 
-            function f() -> a, b {}
+            function f() -> a, b { }
             let cc, dd := f() 
 
             mstore(0x80, add(mload(0x80), 3))
