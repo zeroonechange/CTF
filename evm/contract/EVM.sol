@@ -7,6 +7,7 @@ contract EVM {
     }
 
 
+
     function f() public {
         assembly{
             function allocate(length) -> pos {
