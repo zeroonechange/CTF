@@ -1,0 +1,38 @@
+
+8 - 从EVM 角度看合约创建与部署
+	constant    immutable 不同  
+	init code 分为 三部分    setup_code  runtime_code  constructor_arguments 
+		setup_code 运行构造函数  好比是火箭助推器  为了部署代码  部署完了就不要了  因为链上存储是非常珍贵的
+		runtime_code 部署在链上 运行的字节码  就是evm执行时需要多次使用的代码  存储在账户的状态中 
+		constructor_arguments 就是构造函数所携带的参数  附加在最后面   
+	runtime_code 可以通过命令获取:
+		solc --bin-runtime XXX.sol  
+	创建合约 contract  
+		1. 一种是外部账号创建 例如 remix 
+		2. 合约内部创建  例如汇编  CREATE   or    CREATE2   
+			 CREATE:	value	offset	length	
+			CREATE2:    value	offset	length	salt    
+		CREATE2多了一个参数  salt  这样新合约地址不再和 nonce有关   俩个gas费都一样  32,000 
+	
+	
+
+7 - 与其他智能合约的交互
+	主要是 那个 CALL 汇编   基本上把7个参数都放在内存里面   
+	address 经过了掩码处理  data包含函数签名  
+	调用成功了返回 0x01  否则就是 0x00  在 stack(0) 中  
+	
+
+6 - 完整的智能合约布局
+	先找到main函数的范围 
+	根据selector 跳转到各个函数  每个函数都是并排的  中间不会穿插   比如 fun1在 [11, 20] fun2 在[21, 30] ...  
+	除了自己写的函数  可以根据 selector去找到   编译器帮我们生成了其他的函数  
+		1.用来防止溢出 检查参数  不对劲 revert 
+		2.检查地址是否合法  不对劲 revert 
+	JUMP 和 JUMPI 是不一样的   JUMPI是带有条件判断的  JUMP只是去执行一个函数  后面还会继续执行   应该看作是线性执行  进入函数是递归
+
+5 - EVM如何处理 if/else/for/functions、
+	IF-ELSE 就是各种 JUMPI 
+	FOR 比较麻烦  要检查溢出  
+	无参函数  嵌套调用  子函数执行完了  栈就会被清除  
+	带参数函数调用   类似的 
+	带返回值的函数调用    调用前将所有参数推到堆栈中   函数执行后  所有返回值都被推送到堆栈中   

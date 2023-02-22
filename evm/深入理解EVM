@@ -14,30 +14,53 @@
 	 
 
 5.深入了解Solidity数据位置 - Calldata
-
+	IF-ELSE 就是各种 JUMPI 
+	FOR 比较麻烦  要检查溢出  
+	无参函数  嵌套调用  子函数执行完了  栈就会被清除  
+	带参数函数调用   类似的 
+	带返回值的函数调用    调用前将所有参数推到堆栈中   函数执行后  所有返回值都被推送到堆栈中   
 
 6.逆向 EVM - 解析原始Calldata数据
+	先找到main函数的范围 
+	根据selector 跳转到各个函数  每个函数都是并排的  中间不会穿插   比如 fun1在 [11, 20] fun2 在[21, 30] ...  
+	除了自己写的函数  可以根据 selector去找到   编译器帮我们生成了其他的函数  
+		1.用来防止溢出 检查参数  不对劲 revert 
+		2.检查地址是否合法  不对劲 revert 
+	JUMP 和 JUMPI 是不一样的   JUMPI是带有条件判断的  JUMP只是去执行一个函数  后面还会继续执行   应该看作是线性执行  进入函数是递归
+
+7.通过逆向和调试深入EVM #1 - 理解汇编
+	主要是 那个 CALL 汇编   基本上把7个参数都放在内存里面   
+	address 经过了掩码处理  data包含函数签名  
+	调用成功了返回 0x01  否则就是 0x00  在 stack(0) 中  
+
+8.通过逆向和调试理解EVM #2 ：部署智能合约
+	constant    immutable 不同  
+	init code 分为 三部分    setup_code  runtime_code  constructor_arguments 
+		setup_code 运行构造函数  好比是火箭助推器  为了部署代码  部署完了就不要了  因为链上存储是非常珍贵的
+		runtime_code 部署在链上 运行的字节码  就是evm执行时需要多次使用的代码  存储在账户的状态中 
+		constructor_arguments 就是构造函数所携带的参数  附加在最后面   
+	runtime_code 可以通过命令获取:
+		solc --bin-runtime XXX.sol  
+	创建合约 contract  
+		1. 一种是外部账号创建 例如 remix 
+		2. 合约内部创建  例如汇编  CREATE   or    CREATE2   
+			 CREATE:	value	offset	length	
+			CREATE2:    value	offset	length	salt    
+		CREATE2多了一个参数  salt  这样新合约地址不再和 nonce有关   俩个gas费都一样  32,000 
+
+9.通过逆向和调试理解EVM #3 ：存储布局如何工作？
 
 
-	7.通过逆向和调试深入EVM #1 - 理解汇编
+10.通过逆向和调试理解EVM #4：结束/中止执行的5种指令
 
 
-	8.通过逆向和调试理解EVM #2 ：部署智能合约
+11.通过逆向和调试深入EVM #5 - EVM如何处理 if/else/for/functions
 
 
-	9.通过逆向和调试理解EVM #3 ：存储布局如何工作？
+12.通过逆向和调试深入EVM #6 - 完整的智能合约布局
 
 
-	10.通过逆向和调试理解EVM #4：结束/中止执行的5种指令
-
-
-	11.通过逆向和调试深入EVM #5 - EVM如何处理 if/else/for/functions
-
-
-	12.通过逆向和调试深入EVM #6 - 完整的智能合约布局
-
-
-	13.通过逆向和调试深入EVM #7 - 与其他智能合约的交互
+13.通过逆向和调试深入EVM #7 - 与其他智能合约的交互
 
 
 14.从EVM 角度看合约创建与部署
@@ -57,6 +80,168 @@
 
 
 
+contract Contract {
+    function main() {
+        memory[0x40:0x60] = 0xa0;
+        var var0 = msg.value;
+        var temp0 = memory[0x40:0x60]; // 0xa0
+        var temp1 = code.length - 0x01d4;  // 
+        memory[temp0:temp0 + temp1] = code[0x01d4:0x01d4 + temp1]; // runtime code 
+        memory[0x40:0x60] = temp1 + temp0;   // temp1 + 0xa0 
+        var0 = 0x0032;    
+        var var2 = temp0;  // 0xa0 
+        var var1 = var2 + temp1;   
+        var0 = func_00BE(var1, var2);
+        var temp2 = var0;
+        memory[0x80:0xa0] = temp2;   // 检索构造函数参数并将其存储在内存偏移量
+        memory[0x00:0x20] = msg.sender;
+        memory[0x20:0x40] = 0x00;          
+        storage[keccak256(memory[0x00:0x40])] = temp2; // 储存值
+        var temp3 = memory[0x80:0xa0];
+        memory[0x00:0xd1] = code[0x0103:0x01d4];  // 代码
+        memory[0x49:0x69] = temp3;   
+        return memory[0x00:0xd1];
+    }
+    
+    function func_0088(var arg0) returns (var r0) { return arg0; }
+    
+	// 内存的值 == 0x009b 
+    function func_0092(var arg0) {
+        var var0 = 0x009b;
+        var var1 = arg0;
+        var0 = func_0088(var1);
+    
+        if (arg0 == var0) { return; }
+        else { revert(memory[0x00:0x00]); }
+    }
+    
+    function func_00A9(var arg0, var arg1) returns (var r0) {
+        var var0 = memory[arg1:arg1 + 0x20]; // 取内存的值
+        var var1 = 0x00b8;   
+        var var2 = var0;  
+        func_0092(var2); //  var2 == 0x009b ? 
+        return var0;
+    }
+    
+    function func_00BE(var arg0, var arg1) returns (var r0) {
+        var var0 = 0x00;
+    
+        if (arg0 - arg1 i>= 0x20) {
+            var var1 = 0x00;
+            var var2 = 0x00e2;
+            var var3 = arg0;
+            var var4 = arg1 + var1;
+            return func_00A9(var3, var4);
+        } else {
+            var1 = 0x00d3;
+            revert(memory[0x00:0x00]);
+        }
+    }
+}
+
+
+
+# 用 https://ethervm.io/decompile#func_func_0093 反编译后的汇编代码  
+
+源码:
+contract Test{
+    address owner;
+
+    uint data; 
+    
+    function setOwner(address _addr) external {
+        owner = _addr;
+    }
+
+    function returnAdd(uint x, uint y) internal view returns(uint){
+        return x+y;
+    }
+
+    function setBalance(uint x) external{
+        uint var1 = 10;
+        data = returnAdd(x, var1);
+    }
+}
+
+汇编码:
+6080604052348015600f57600080fd5b506004361060325760003560e01c806313af4035146037578063fb1669ca146066575b600080fd5b606460423660046093565b600080546001600160a01b0319166001600160a01b0392909216919091179055565b005b6064607136600460ba565b600a607b82826082565b6001555050565b6000608c828460d2565b9392505050565b60006020828403121560a457600080fd5b81356001600160a01b0381168114608c57600080fd5b60006020828403121560cb57600080fd5b5035919050565b6000821982111560f257634e487b7160e01b600052601160045260246000fd5b50019056fea26469706673582212208369e3065b32698e7561dc1323c1cd097dedd177a207f21ae4dba7a22aec9fc064736f6c63430008070033
+
+反编译后的代码:
+contract Contract {
+    function main() {
+        memory[0x40:0x60] = 0x80;
+        var var0 = msg.value;
+    
+        if (var0) { revert(memory[0x00:0x00]); }
+    
+        if (msg.data.length < 0x04) { revert(memory[0x00:0x00]); }
+    
+        var0 = msg.data[0x00:0x20] >> 0xe0;
+    
+        if (var0 == 0x13af4035) {
+            // Dispatch table entry for setOwner(address)
+            var var1 = 0x64;
+            var var2 = 0x42;
+            var var3 = msg.data.length;
+            var var4 = 0x04;
+            var2 = func_0093(var3, var4);  //calldata长度  4
+            func_0042(var2);
+            stop();
+        } else if (var0 == 0xfb1669ca) {
+            // Dispatch table entry for setBalance(uint256)
+            var1 = 0x64;
+            var2 = 0x71;
+            var3 = msg.data.length;
+            var4 = 0x04;
+            var2 = func_00BA(var3, var4);
+            var3 = 0x0a;
+            var4 = 0x7b;
+            var var5 = var2;
+            var var6 = var3;
+            var var7 = 0x00;
+            var var8 = 0x8c;
+            var var9 = var6;
+            var var10 = var5;
+            var8 = func_00D2(var9, var10);
+            var4 = var8;
+            // Error: Could not resolve jump destination!
+        } else { revert(memory[0x00:0x00]); }
+    }
+    
+    function func_0042(var arg0) {
+        storage[0x00] = (arg0 & (0x01 << 0xa0) - 0x01) | (storage[0x00] & ~((0x01 << 0xa0) - 0x01));
+    }
+    
+	// calldata长度  4
+    function func_0093(var arg0, var arg1) returns (var r0) {
+        var var0 = 0x00;
+    
+        if (arg0 - arg1 i< 0x20) { revert(memory[0x00:0x00]); }
+    
+        var temp0 = msg.data[arg1:arg1 + 0x20]; // 04 
+        var var1 = temp0;
+    
+        if (var1 == var1 & (0x01 << 0xa0) - 0x01) { return var1; }
+        else { revert(memory[0x00:0x00]); }
+    }
+    
+    function func_00BA(var arg0, var arg1) returns (var r0) {
+        var var0 = 0x00;
+    
+        if (arg0 - arg1 i>= 0x20) { return msg.data[arg1:arg1 + 0x20]; }
+        else { revert(memory[0x00:0x00]); }
+    }
+    
+    function func_00D2(var arg0, var arg1) returns (var r0) {
+        var var0 = 0x00;
+    
+        if (arg1 <= ~arg0) { return arg1 + arg0; }
+    
+        memory[0x00:0x20] = 0x4e487b71 << 0xe0;
+        memory[0x04:0x24] = 0x11;
+        revert(memory[0x00:0x24]);
+    }
+}
 
 
 
