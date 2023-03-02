@@ -1,4 +1,5 @@
 
+
 8 - 从EVM 角度看合约创建与部署
 	constant    immutable 不同  
 	init code 分为 三部分    setup_code  runtime_code  constructor_arguments 
